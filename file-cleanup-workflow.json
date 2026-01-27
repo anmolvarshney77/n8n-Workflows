@@ -1,0 +1,159 @@
+{
+  "name": "File Cleanup Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "weekly-trigger",
+      "name": "Weekly Sunday 3AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "command": "find /tmp/uploads -type f -mtime +7",
+        "options": {}
+      },
+      "id": "find-old-files",
+      "name": "Find Old Files",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse file list and prepare for deletion\nconst items = $input.all();\nconst fileList = items[0].json.stdout.split('\\n').filter(f => f.trim());\n\nconst fileData = fileList.map(filePath => ({\n  json: {\n    path: filePath,\n    name: filePath.split('/').pop(),\n    deleteCommand: `rm \"${filePath}\"`,\n    timestamp: new Date().toISOString()\n  }\n}));\n\nreturn fileData;"
+      },
+      "id": "parse-files",
+      "name": "Parse File List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.deleteCommand }}",
+        "options": {}
+      },
+      "id": "delete-file",
+      "name": "Delete File",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate cleanup summary\nconst items = $input.all();\n\nconst summary = {\n  json: {\n    totalDeleted: items.length,\n    timestamp: new Date().toISOString(),\n    status: 'completed',\n    files: items.map(item => item.json.name)\n  }\n};\n\nreturn [summary];"
+      },
+      "id": "generate-summary",
+      "name": "Generate Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "channel": "#maintenance",
+        "text": "🧹 Weekly Cleanup Completed",
+        "attachments": [
+          {
+            "color": "#36a64f",
+            "title": "File Cleanup Summary",
+            "text": "Deleted {{ $json.totalDeleted }} old files from /tmp/uploads",
+            "fields": {
+              "item": [
+                {
+                  "short": true,
+                  "title": "Status",
+                  "value": "={{ $json.status }}"
+                },
+                {
+                  "short": true,
+                  "title": "Time",
+                  "value": "={{ $json.timestamp }}"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "id": "slack-notification",
+      "name": "Send Slack Summary",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "Weekly Sunday 3AM": {
+      "main": [
+        [
+          {
+            "node": "Find Old Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Old Files": {
+      "main": [
+        [
+          {
+            "node": "Parse File List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse File List": {
+      "main": [
+        [
+          {
+            "node": "Delete File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete File": {
+      "main": [
+        [
+          {
+            "node": "Generate Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "tags": ["maintenance", "cleanup", "automation"]
+}
