@@ -1,0 +1,134 @@
+{
+  "name": "API Data Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "interval-trigger",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.example.com/users",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.apiToken }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-request-node",
+      "name": "Fetch API Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform API response to database format\nconst items = $input.all();\n\nconst transformedData = items.map(item => {\n  const user = item.json;\n  \n  return {\n    json: {\n      external_id: user.id,\n      name: user.full_name || user.name,\n      email: user.email_address || user.email,\n      status: user.active ? 'active' : 'inactive',\n      synced_at: new Date().toISOString(),\n      metadata: JSON.stringify(user.metadata || {})\n    }\n  };\n});\n\nreturn transformedData;"
+      },
+      "id": "transform-node",
+      "name": "Transform Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "table": "synced_users",
+        "updateKey": "external_id",
+        "columns": {
+          "mappings": [
+            {
+              "column": "external_id",
+              "value": "={{ $json.external_id }}"
+            },
+            {
+              "column": "name",
+              "value": "={{ $json.name }}"
+            },
+            {
+              "column": "email",
+              "value": "={{ $json.email }}"
+            },
+            {
+              "column": "status",
+              "value": "={{ $json.status }}"
+            },
+            {
+              "column": "synced_at",
+              "value": "={{ $json.synced_at }}"
+            },
+            {
+              "column": "metadata",
+              "value": "={{ $json.metadata }}"
+            }
+          ]
+        }
+      },
+      "id": "db-upsert-node",
+      "name": "Upsert to Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch API Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch API Data": {
+      "main": [
+        [
+          {
+            "node": "Transform Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Data": {
+      "main": [
+        [
+          {
+            "node": "Upsert to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "tags": ["api", "sync", "integration"]
+}
