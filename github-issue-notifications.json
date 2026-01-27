@@ -1,0 +1,205 @@
+{
+  "name": "GitHub Issue Notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "github-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "GitHub Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "github-webhook-id"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.action }}",
+              "operation": "equals",
+              "value2": "opened"
+            }
+          ]
+        }
+      },
+      "id": "filter-opened-issues",
+      "name": "Filter New Issues",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format issue data for notification\nconst issue = $json.issue;\nconst repository = $json.repository;\n\nconst formattedData = {\n  title: issue.title,\n  number: issue.number,\n  author: issue.user.login,\n  url: issue.html_url,\n  body: issue.body ? issue.body.substring(0, 200) + '...' : 'No description',\n  labels: issue.labels.map(l => l.name).join(', '),\n  repo: repository.full_name,\n  createdAt: issue.created_at\n};\n\nreturn [{ json: formattedData }];"
+      },
+      "id": "format-issue-data",
+      "name": "Format Issue Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 250]
+    },
+    {
+      "parameters": {
+        "channel": "#github-issues",
+        "text": "🆕 New Issue Created",
+        "attachments": [
+          {
+            "color": "#0366d6",
+            "title": "#{{ $json.number }} - {{ $json.title }}",
+            "title_link": "={{ $json.url }}",
+            "text": "={{ $json.body }}",
+            "fields": {
+              "item": [
+                {
+                  "short": true,
+                  "title": "Repository",
+                  "value": "={{ $json.repo }}"
+                },
+                {
+                  "short": true,
+                  "title": "Author",
+                  "value": "={{ $json.author }}"
+                },
+                {
+                  "short": false,
+                  "title": "Labels",
+                  "value": "={{ $json.labels || 'None' }}"
+                }
+              ]
+            }
+          }
+        ],
+        "options": {}
+      },
+      "id": "slack-notify",
+      "name": "Send to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [850, 250]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "table": "github_issues",
+        "columns": {
+          "mappings": [
+            {
+              "column": "issue_number",
+              "value": "={{ $json.number }}"
+            },
+            {
+              "column": "title",
+              "value": "={{ $json.title }}"
+            },
+            {
+              "column": "author",
+              "value": "={{ $json.author }}"
+            },
+            {
+              "column": "repository",
+              "value": "={{ $json.repo }}"
+            },
+            {
+              "column": "url",
+              "value": "={{ $json.url }}"
+            },
+            {
+              "column": "created_at",
+              "value": "={{ $json.createdAt }}"
+            }
+          ]
+        }
+      },
+      "id": "save-to-db",
+      "name": "Save to Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [850, 350]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'success', message: 'Issue processed' } }}",
+        "options": {}
+      },
+      "id": "respond-node",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "GitHub Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter New Issues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter New Issues": {
+      "main": [
+        [
+          {
+            "node": "Format Issue Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Issue Data": {
+      "main": [
+        [
+          {
+            "node": "Send to Slack",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Slack": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Database": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "tags": ["github", "notifications", "webhook"]
+}
