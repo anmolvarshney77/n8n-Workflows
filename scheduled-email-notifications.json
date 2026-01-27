@@ -1,0 +1,76 @@
+{
+  "name": "Scheduled Email Notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-node",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate daily report data\nconst today = new Date();\nconst reportData = {\n  date: today.toISOString().split('T')[0],\n  metrics: {\n    users: Math.floor(Math.random() * 1000) + 500,\n    revenue: (Math.random() * 10000 + 5000).toFixed(2),\n    conversions: Math.floor(Math.random() * 100) + 50\n  },\n  summary: 'Daily performance report generated successfully'\n};\n\nreturn [{ json: reportData }];"
+      },
+      "id": "generate-report-node",
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "reports@company.com",
+        "toEmail": "team@company.com",
+        "subject": "Daily Performance Report - {{ $json.date }}",
+        "emailType": "html",
+        "message": "<h2>Daily Report</h2><p>Users: {{ $json.metrics.users }}</p><p>Revenue: ${{ $json.metrics.revenue }}</p><p>Conversions: {{ $json.metrics.conversions }}</p>"
+      },
+      "id": "send-email-node",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "tags": ["automation", "email", "reporting"]
+}
