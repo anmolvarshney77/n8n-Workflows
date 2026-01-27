@@ -1,0 +1,99 @@
+{
+  "name": "Database Backup Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger-node",
+      "name": "Cron Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM users",
+        "options": {}
+      },
+      "id": "postgres-node",
+      "name": "Postgres Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format backup data\nconst timestamp = new Date().toISOString();\nconst items = $input.all();\n\nconst backup = {\n  timestamp: timestamp,\n  recordCount: items.length,\n  data: items.map(item => item.json),\n  backupType: 'full',\n  status: 'completed'\n};\n\nreturn [{ json: backup }];"
+      },
+      "id": "format-backup-node",
+      "name": "Format Backup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucket": "database-backups",
+        "fileName": "backup-{{ $now.toFormat('yyyy-MM-dd-HHmmss') }}.json",
+        "binaryData": false,
+        "jsonData": "={{ JSON.stringify($json) }}"
+      },
+      "id": "s3-upload-node",
+      "name": "Upload to S3",
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Cron Trigger": {
+      "main": [
+        [
+          {
+            "node": "Postgres Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Query": {
+      "main": [
+        [
+          {
+            "node": "Format Backup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Backup": {
+      "main": [
+        [
+          {
+            "node": "Upload to S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "tags": ["backup", "database", "automation"]
+}
