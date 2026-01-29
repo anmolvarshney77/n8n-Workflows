@@ -1,0 +1,213 @@
+{
+  "name": "Data Validation Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "validate-data",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "data-validation-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate incoming data\nconst items = $input.all();\n\nconst validatedItems = items.map(item => {\n  const data = item.json;\n  const errors = [];\n  \n  // Email validation\n  if (!data.email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(data.email)) {\n    errors.push('Invalid email format');\n  }\n  \n  // Phone validation\n  if (data.phone && !/^\\+?[1-9]\\d{1,14}$/.test(data.phone)) {\n    errors.push('Invalid phone number');\n  }\n  \n  // Required fields\n  if (!data.name || data.name.trim().length < 2) {\n    errors.push('Name must be at least 2 characters');\n  }\n  \n  // Age validation\n  if (data.age && (data.age < 0 || data.age > 150)) {\n    errors.push('Age must be between 0 and 150');\n  }\n  \n  return {\n    json: {\n      originalData: data,\n      isValid: errors.length === 0,\n      errors: errors,\n      validatedAt: new Date().toISOString(),\n      validationStatus: errors.length === 0 ? 'PASSED' : 'FAILED'\n    }\n  };\n});\n\nreturn validatedItems;"
+      },
+      "id": "validation-code",
+      "name": "Validate Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isValid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "validation-check",
+      "name": "Check Validation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "table": "validated_data",
+        "columns": {
+          "mappings": [
+            {
+              "column": "name",
+              "value": "={{ $json.originalData.name }}"
+            },
+            {
+              "column": "email",
+              "value": "={{ $json.originalData.email }}"
+            },
+            {
+              "column": "phone",
+              "value": "={{ $json.originalData.phone }}"
+            },
+            {
+              "column": "age",
+              "value": "={{ $json.originalData.age }}"
+            },
+            {
+              "column": "validated_at",
+              "value": "={{ $json.validatedAt }}"
+            }
+          ]
+        }
+      },
+      "id": "save-valid-data",
+      "name": "Save Valid Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [850, 250]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "table": "validation_errors",
+        "columns": {
+          "mappings": [
+            {
+              "column": "data",
+              "value": "={{ JSON.stringify($json.originalData) }}"
+            },
+            {
+              "column": "errors",
+              "value": "={{ JSON.stringify($json.errors) }}"
+            },
+            {
+              "column": "validated_at",
+              "value": "={{ $json.validatedAt }}"
+            }
+          ]
+        }
+      },
+      "id": "save-invalid-data",
+      "name": "Log Validation Errors",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [850, 350]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format response\nconst item = $input.first().json;\n\nconst response = {\n  success: item.isValid,\n  status: item.validationStatus,\n  message: item.isValid ? 'Data validated successfully' : 'Validation failed',\n  errors: item.errors || [],\n  timestamp: item.validatedAt\n};\n\nreturn [{ json: response }];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "={{ $json.success ? 200 : 400 }}"
+        }
+      },
+      "id": "respond-node",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Data": {
+      "main": [
+        [
+          {
+            "node": "Check Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Validation": {
+      "main": [
+        [
+          {
+            "node": "Save Valid Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Validation Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Valid Data": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Validation Errors": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "tags": ["validation", "data-quality", "webhook"]
+}
