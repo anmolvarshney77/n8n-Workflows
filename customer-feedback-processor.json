@@ -1,0 +1,208 @@
+{
+  "name": "Customer Feedback Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "feedback",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Feedback Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "feedback-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze feedback sentiment\nconst items = $input.all();\n\nconst analyzedItems = items.map(item => {\n  const feedback = item.json;\n  const text = feedback.comment || '';\n  const rating = feedback.rating || 0;\n  \n  // Simple sentiment analysis based on rating and keywords\n  let sentiment = 'neutral';\n  const positiveWords = ['great', 'excellent', 'amazing', 'love', 'perfect', 'good'];\n  const negativeWords = ['bad', 'terrible', 'awful', 'hate', 'poor', 'worst'];\n  \n  const lowerText = text.toLowerCase();\n  const hasPositive = positiveWords.some(word => lowerText.includes(word));\n  const hasNegative = negativeWords.some(word => lowerText.includes(word));\n  \n  if (rating >= 4 || (hasPositive && !hasNegative)) {\n    sentiment = 'positive';\n  } else if (rating <= 2 || (hasNegative && !hasPositive)) {\n    sentiment = 'negative';\n  }\n  \n  return {\n    json: {\n      customerId: feedback.customer_id,\n      customerName: feedback.customer_name,\n      rating: rating,\n      comment: text,\n      sentiment: sentiment,\n      category: feedback.category || 'general',\n      processedAt: new Date().toISOString(),\n      requiresFollowup: sentiment === 'negative' || rating <= 2\n    }\n  };\n});\n\nreturn analyzedItems;"
+      },
+      "id": "analyze-sentiment",
+      "name": "Analyze Sentiment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "table": "customer_feedback",
+        "columns": {
+          "mappings": [
+            {
+              "column": "customer_id",
+              "value": "={{ $json.customerId }}"
+            },
+            {
+              "column": "customer_name",
+              "value": "={{ $json.customerName }}"
+            },
+            {
+              "column": "rating",
+              "value": "={{ $json.rating }}"
+            },
+            {
+              "column": "comment",
+              "value": "={{ $json.comment }}"
+            },
+            {
+              "column": "sentiment",
+              "value": "={{ $json.sentiment }}"
+            },
+            {
+              "column": "category",
+              "value": "={{ $json.category }}"
+            },
+            {
+              "column": "processed_at",
+              "value": "={{ $json.processedAt }}"
+            }
+          ]
+        }
+      },
+      "id": "save-feedback",
+      "name": "Save to Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.requiresFollowup }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-followup",
+      "name": "Needs Followup?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "channel": "#customer-support",
+        "text": "⚠️ Negative Feedback Alert",
+        "attachments": [
+          {
+            "color": "#ff0000",
+            "title": "Customer: {{ $json.customerName }}",
+            "text": "Rating: {{ $json.rating }}/5\\n\\nComment: {{ $json.comment }}",
+            "fields": {
+              "item": [
+                {
+                  "short": true,
+                  "title": "Sentiment",
+                  "value": "={{ $json.sentiment }}"
+                },
+                {
+                  "short": true,
+                  "title": "Category",
+                  "value": "={{ $json.category }}"
+                },
+                {
+                  "short": false,
+                  "title": "Customer ID",
+                  "value": "={{ $json.customerId }}"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "id": "notify-support",
+      "name": "Alert Support Team",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1050, 250]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'success', message: 'Feedback received and processed', sentiment: $json.sentiment } }}",
+        "options": {}
+      },
+      "id": "respond-node",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 350]
+    }
+  ],
+  "connections": {
+    "Feedback Webhook": {
+      "main": [
+        [
+          {
+            "node": "Analyze Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Save to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Database": {
+      "main": [
+        [
+          {
+            "node": "Needs Followup?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Followup?": {
+      "main": [
+        [
+          {
+            "node": "Alert Support Team",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Support Team": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "tags": ["customer-service", "feedback", "sentiment-analysis"]
+}

@@ -1,0 +1,236 @@
+{
+  "name": "Inventory Monitoring",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT product_id, product_name, current_stock, minimum_stock, category FROM inventory WHERE current_stock <= minimum_stock * 1.2",
+        "options": {}
+      },
+      "id": "check-inventory",
+      "name": "Check Low Stock Items",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Categorize inventory alerts\nconst items = $input.all();\n\nif (items.length === 0) {\n  return [];\n}\n\nconst categorizedItems = items.map(item => {\n  const data = item.json;\n  const stockPercentage = (data.current_stock / data.minimum_stock) * 100;\n  \n  let priority = 'medium';\n  let alertLevel = '⚠️';\n  \n  if (stockPercentage <= 50) {\n    priority = 'critical';\n    alertLevel = '🚨';\n  } else if (stockPercentage <= 80) {\n    priority = 'high';\n    alertLevel = '⚠️';\n  } else {\n    priority = 'medium';\n    alertLevel = 'ℹ️';\n  }\n  \n  return {\n    json: {\n      productId: data.product_id,\n      productName: data.product_name,\n      currentStock: data.current_stock,\n      minimumStock: data.minimum_stock,\n      category: data.category,\n      stockPercentage: Math.round(stockPercentage),\n      priority: priority,\n      alertLevel: alertLevel,\n      checkedAt: new Date().toISOString()\n    }\n  };\n});\n\nreturn categorizedItems;"
+      },
+      "id": "categorize-alerts",
+      "name": "Categorize Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.priority }}",
+              "operation": "equals",
+              "value2": "critical"
+            }
+          ]
+        }
+      },
+      "id": "filter-critical",
+      "name": "Filter Critical",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "channel": "#inventory-critical",
+        "text": "🚨 CRITICAL: Stock Alert",
+        "attachments": [
+          {
+            "color": "#ff0000",
+            "title": "{{ $json.productName }} (ID: {{ $json.productId }})",
+            "text": "Stock is critically low!",
+            "fields": {
+              "item": [
+                {
+                  "short": true,
+                  "title": "Current Stock",
+                  "value": "={{ $json.currentStock }}"
+                },
+                {
+                  "short": true,
+                  "title": "Minimum Stock",
+                  "value": "={{ $json.minimumStock }}"
+                },
+                {
+                  "short": true,
+                  "title": "Stock Level",
+                  "value": "={{ $json.stockPercentage }}%"
+                },
+                {
+                  "short": true,
+                  "title": "Category",
+                  "value": "={{ $json.category }}"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "id": "critical-alert",
+      "name": "Send Critical Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1050, 250]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate summary report\nconst items = $input.all();\n\nconst summary = {\n  totalLowStockItems: items.length,\n  criticalItems: items.filter(i => i.json.priority === 'critical').length,\n  highPriorityItems: items.filter(i => i.json.priority === 'high').length,\n  mediumPriorityItems: items.filter(i => i.json.priority === 'medium').length,\n  categories: [...new Set(items.map(i => i.json.category))],\n  checkedAt: new Date().toISOString(),\n  items: items.map(i => i.json)\n};\n\nreturn [{ json: summary }];"
+      },
+      "id": "generate-summary",
+      "name": "Generate Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 350]
+    },
+    {
+      "parameters": {
+        "channel": "#inventory-reports",
+        "text": "📊 Inventory Status Report",
+        "attachments": [
+          {
+            "color": "#36a64f",
+            "title": "Low Stock Summary",
+            "fields": {
+              "item": [
+                {
+                  "short": true,
+                  "title": "Total Low Stock",
+                  "value": "={{ $json.totalLowStockItems }}"
+                },
+                {
+                  "short": true,
+                  "title": "Critical",
+                  "value": "={{ $json.criticalItems }}"
+                },
+                {
+                  "short": true,
+                  "title": "High Priority",
+                  "value": "={{ $json.highPriorityItems }}"
+                },
+                {
+                  "short": true,
+                  "title": "Medium Priority",
+                  "value": "={{ $json.mediumPriorityItems }}"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "id": "send-summary",
+      "name": "Send Summary Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1250, 350]
+    }
+  ],
+  "connections": {
+    "Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Check Low Stock Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Low Stock Items": {
+      "main": [
+        [
+          {
+            "node": "Categorize Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize Alerts": {
+      "main": [
+        [
+          {
+            "node": "Filter Critical",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Critical": {
+      "main": [
+        [
+          {
+            "node": "Send Critical Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Critical Alert": {
+      "main": [
+        [
+          {
+            "node": "Generate Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Summary Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "tags": ["inventory", "monitoring", "alerts"]
+}
