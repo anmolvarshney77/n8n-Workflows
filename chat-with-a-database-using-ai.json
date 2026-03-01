@@ -152,7 +152,7 @@
         ]
       ]
     },
-    "When chat message received": {
+    "When chat message is recieved": {
       "main": [
         [
           {
