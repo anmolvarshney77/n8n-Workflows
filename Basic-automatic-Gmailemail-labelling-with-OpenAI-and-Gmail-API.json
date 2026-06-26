@@ -37,8 +37,9 @@
         -60
       ],
       "parameters": {
+        "model": "gpt-4o-mini",
         "options": {
-          "maxTokens": 4096
+          "maxTokens": 512
         }
       },
       "credentials": {
