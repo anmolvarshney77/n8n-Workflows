@@ -122,7 +122,7 @@
     },
     {
       "id": "be4a92ab-d3ab-451b-8655-172851f68628",
-      "name": "Gmail - create label",
+      "name": "gmail - create label",
       "type": "n8n-nodes-base.gmailTool",
       "position": [
         640,
