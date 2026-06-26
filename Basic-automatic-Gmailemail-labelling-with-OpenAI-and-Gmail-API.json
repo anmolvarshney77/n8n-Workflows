@@ -159,28 +159,14 @@
       "parameters": {
         "text": "=Label the email based on the details below:\n{{ JSON.stringify($json) }}",
         "options": {
-          "maxIterations": 5,
-          "systemMessage": "Objective:\nAutomatically categorize incoming emails based on existing Gmail labels or create a new label if none match.\n\nTools:\n- Get message\n- Read all labels\n- Create label\n- Assign label to message\n\nInstructions:\n\nLabel Matching:\n\nAnalyze the email's subject, sender, recipient, keywords, and content.\nCompare with existing Gmail labels to find the most relevant match.\nLabel Assignment:\n\nAssign the email to the most appropriate existing label.`\nRemove the inbox label if the email is of less importance (like ads, promotions, aka \"Reclame\"), keep normal and important emails in the inbox.\nIf no suitable label exists, create a new label based on the existing labels. Try reusing existing labels as much as possible. Always create a label as a sublabel, if no label applies, if the main label already exists, create the new label under the existing label, if no main label exists, create the label AI and create the new label under this label.\nLabel Creation:\n\nEnsure new labels align with the structure of existing ones, including capitalization, delimiters, and prefixes.\nExamples:\n\nIf the email subject is \"Project Alpha Update,\" assign to [Project Alpha] if it exists.\nFor \"New Vendor Inquiry,\" create \"Vendor Inquiry\" if no relevant label exists.\nOutcome:\nEmails are consistently categorized under the appropriate or newly created labels, maintaining Gmail's organizational structure."
+          "maxIterations": 10,
+          "systemMessage": "You are an email labelling agent for Gmail. Your job is to read each incoming email and assign the most appropriate label.\n\nSTEPS (always follow in order):\n1. Read the full email content using the message ID provided.\n2. Fetch all existing Gmail labels.\n3. Choose the best matching label based on the email subject, sender, and body.\n4. If no existing label fits, create a new sublabel: use an existing parent label if one applies, otherwise create it under 'AI/'.\n5. Assign the chosen label to the message.\n6. If the email is promotional, a newsletter, marketing, or automated (e.g. receipts, alerts, ads), ALSO remove the INBOX label so it doesn't clutter the inbox.\n\nLABEL PRIORITY:\n- Work / Projects over generic labels\n- Specific over broad (prefer 'Work/ProjectAlpha' over 'Work')\n- Reuse existing labels — do NOT create duplicates\n- Match capitalization and delimiter style of existing labels (e.g. 'Category/Subcategory')\n\nNEW LABEL RULES:\n- Only create a new label if no existing one is a reasonable match\n- Always nest under an existing parent if possible\n- If no parent fits, create under 'AI/' (e.g. 'AI/VendorInquiry')\n\nBe decisive. One label per email is enough unless multiple clearly apply."
         },
         "promptType": "define"
       },
       "notesInFlow": true,
       "retryOnFail": false,
       "typeVersion": 1.7
-    },
-    {
-      "id": "6b514df4-761c-4072-abf8-d572ee4b8030",
-      "name": "Window Buffer Memory",
-      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
-      "position": [
-        -60,
-        -40
-      ],
-      "parameters": {
-        "sessionKey": "={{ $json.id }}",
-        "sessionIdType": "customKey"
-      },
-      "typeVersion": 1.3
     },
     {
       "id": "f06717ed-00d7-4a99-a78c-53217a0067e7",
@@ -321,18 +307,7 @@
         ]
       ]
     },
-    "Window Buffer Memory": {
-      "ai_memory": [
-        [
-          {
-            "node": "Gmail labelling agent",
-            "type": "ai_memory",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Gmail - add label to message": {
+"Gmail - add label to message": {
       "ai_tool": [
         [
           {
